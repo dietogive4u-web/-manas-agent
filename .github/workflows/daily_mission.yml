@@ -1,11 +1,8 @@
 name: Manus Mission Daily Run
 
-# ตั้งเวลาทำงาน
 on:
   schedule:
-    # รันทุกวันเวลา 01:00 UTC (ตรงกับ 08:00 น. เวลาไทย)
     - cron: '0 1 * * *'
-  # ช่วยให้เราสามารถกดปุ่ม "Run workflow" เพื่อทดสอบเองได้ตลอดเวลา
   workflow_dispatch:
 
 jobs:
@@ -18,11 +15,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.11' # อัปเกรดเป็นเวอร์ชันที่เสถียร
 
       - name: Install Dependencies
         run: |
-          pip install -r requirements.txt
+          pip install google-generativeai pandas requests
 
       - name: Run Manus Mission
         env:

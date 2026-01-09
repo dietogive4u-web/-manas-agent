@@ -2,29 +2,27 @@ name: Manus Mission Daily Run
 
 on:
   schedule:
-    - cron: '0 1 * * *'  # รันทุกวันเวลา 01:00 UTC (ประมาณ 08:00 น. เวลาไทย)
-  workflow_dispatch:  # ช่วยให้เรากดรันเองได้ด้วยมือ
+    - cron: '0 1 * * *'  # รันอัตโนมัติทุกวันเวลาตี 1
+  workflow_dispatch:      # ปุ่มกดรันเองในหน้า Actions
 
 jobs:
-  build:
+  run-manus-script:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
-          pip install -r requirements.txt
+          pip install google-genai pandas requests
 
-      - name: Run script
+      - name: Run Manus Mission
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
-          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
         run: python main.py

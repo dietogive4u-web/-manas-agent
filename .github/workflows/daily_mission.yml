@@ -24,7 +24,7 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install google-genai pandas requests
+          pip install -r requirements.txt
 
       - name: 🚀 Run Manus Mission
         env:
@@ -35,8 +35,8 @@ jobs:
 
       - name: ✅ Done
         if: success()
-        run: echo "Manus Mission completed successfully!"
+        run: echo "✅ Manus Mission completed successfully!"
         
       - name: ❌ Failed
         if: failure()
-        run: echo "Manus Mission failed! Check the logs above."
+        run: echo "❌ Manus Mission failed! Check the logs above."

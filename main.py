@@ -70,40 +70,77 @@ def call_gemini(gemini_key: str, prompt: str) -> str:
         parts = content.get("parts", [])
         if parts:
             return parts[0].get("text", "")
-    if isinstance(j, dict):
-        text = j.get("text") or j.get("output") or ""
-        if text:
-            return text
     raise ValueError(f"Unexpected Gemini response shape: {j}")
 
-# Anonymous paste targets (no token)
+# เว็บไซต์แปะข้อความสาธารณะ (ไม่ต้องใช้ Token)
 def post_nekobin(content: str) -> Optional[str]:
     try:
         resp = session.post("https://nekobin.com/api/documents", json={"content": content}, timeout=10)
-        if resp.status_code == 201 or resp.status_code == 200:
-            j = resp.json()
-            key = j.get("result", {}).get("key")
-            if key:
-                return f"https://nekobin.com/{key}"
-    except Exception as e:
-        logger.debug("Nekobin failed: %s", e)
-    return None
-
-def post_hastebin(content: str) -> Optional[str]:
-    try:
-        resp = session.post("https://hastebin.com/documents", data=content.encode("utf-8"), timeout=10)
         if resp.status_code in (200, 201):
-            j = resp.json()
-            key = j.get("key")
-            if key:
-                return f"https://hastebin.com/{key}"
-    except Exception as e:
-        logger.debug("Hastebin failed: %s", e)
-    return None
+            key = resp.json().get("result", {}).get("key")
+            return f"https://nekobin.com/{key}"
+    except: return None
 
 def post_pasters(content: str) -> Optional[str]:
-    # paste.rs: POST raw, returns URL in text
     try:
+        resp = session.post("https://paste.rs", data=content.encode("utf-8"), timeout=10)
+        if resp.status_code in (200, 201):
+            return resp.text.strip()
+    except: return None
+
+# ส่งเข้า Discord Webhook
+def post_to_discord(webhook_url: str, content: str) -> Optional[str]:
+    try:
+        resp = session.post(webhook_url, json={"content": content}, timeout=10)
+        if resp.status_code in (200, 204):
+            return "Discord (Webhook)"
+    except: return None
+
+def build_prompt_and_payload(news_content: str, room_link: str) -> str:
+    return (
+        f"จงวิเคราะห์ข่าวนี้เป็นภาษาไทย: {news_content}\n\n"
+        "คำสั่งพิเศษ:\n"
+        "1. เขียนให้น่าสนใจและดูเป็นผู้เชี่ยวชาญ\n"
+        "2. ปิดท้ายด้วยการเชิญชวนคนมาชมการวิเคราะห์จาก AI ที่ถูกฝึกมาพิเศษ (โค้ดชุดเดียว)\n"
+        f"3. แนบลิงก์นี้ไว้ท้ายโพสต์: {room_link}\n"
+        "4. ระบุว่า 'ห้องสนทนานี้รองรับการแปลทุกภาษาทั่วโลก'\n"
+    )
+
+def manus_mission():
+    required = ["GEMINI_API_KEY", "NEWS_API_KEY", "GOOGLE_SHEET_ID"]
+    require_env_vars(required)
+
+    GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+    NEWS_KEY = os.getenv("NEWS_API_KEY")
+    SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
+    DISCORD_URL = os.getenv("DISCORD_WEBHOOK_URL")
+
+    try:
+        room_link = fetch_sheet_first_cell(SHEET_ID)
+        news_content = fetch_latest_news(NEWS_KEY)
+        prompt = build_prompt_and_payload(news_content, room_link)
+        final_text = call_gemini(GEMINI_KEY, prompt)
+
+        post_body = f"{final_text}\n\nลิงก์ห้องสนทนา: {room_link}\n(รองรับการแปลทุกภาษา)"
+
+        # ลำดับการโพสต์: 1. Discord (ถ้ามีคีย์) 2. เว็บบอร์ดสาธารณะ (ถ้าไม่มีคีย์)
+        if DISCORD_URL:
+            res = post_to_discord(DISCORD_URL, post_body)
+            if res:
+                print(f"🚀 โพสต์สำเร็จที่: {res}")
+                return
+
+        for fn in (post_nekobin, post_pasters):
+            url = fn(post_body)
+            if url:
+                print(f"🚀 โพสต์สำเร็จที่: {url}")
+                return
+
+    except Exception as e:
+        print(f"❌ ระบบขัดข้อง: {e}")
+
+if __name__ == "__main__":
+    manus_mission()
         resp = session.post("https://paste.rs", data=content.encode("utf-8"), timeout=10)
         if resp.status_code in (200, 201):
             txt = resp.text.strip()

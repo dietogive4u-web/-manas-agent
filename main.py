@@ -2,67 +2,147 @@ import os
 import requests
 import pandas as pd
 from google import genai
+from datetime import datetime
 
 def manus_mission():
-    # ดึงค่า Keys จาก GitHub Secrets
+    """ภารกิจหลักของมนัส: อ่าน -> วิเคราะห์ -> โพสต์อัตโนมัติ"""
+    
+    print("\n" + "="*60)
+    print("🤖 MANUS MISSION - เริ่มทำงาน")
+    print("="*60 + "\n")
+    
+    # ดึง API Keys จาก GitHub Secrets
     GEMINI_KEY = os.getenv("GEMINI_API_KEY")
     NEWS_KEY = os.getenv("NEWS_API_KEY")
     SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
     
+    # ตรวจสอบว่ามี Keys ครบหรือไม่
+    if not all([GEMINI_KEY, NEWS_KEY, SHEET_ID]):
+        print("❌ ขาด API Keys! ตรวจสอบ GitHub Secrets")
+        return
+    
     try:
-        # 1. อ่านลิงก์ห้องสนทนาจาก Google Sheets ช่อง A1
-        # ต้องตั้งค่า Sheet เป็น "Anyone with the link can view"
+        # ========================================
+        # ขั้นที่ 1: อ่านลิงก์ห้องสนทนาจาก Google Sheets ช่อง A1
+        # ========================================
+        print("📊 กำลังอ่านลิงก์จาก Google Sheets...")
         sheet_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
         df = pd.read_csv(sheet_url, header=None)
-        room_link = df.iloc[0, 0] 
-        print(f"🔗 ลิงก์จากชีต: {room_link}")
         
-        # 2. ดึงข่าวล่าสุดจาก News API (เลือกข่าวเด่น 1 ข่าว)
-        news_url = f"https://newsapi.org/v2/top-headlines?language=en&apiKey={NEWS_KEY}"
-        news_data = requests.get(news_url).json()
+        if df.empty or df.iloc[0, 0] == "":
+            print("❌ ไม่พบลิงก์ในช่อง A1!")
+            return
         
-        if news_data.get('articles'):
-            article = news_data['articles'][0]
-            news_title = article['title']
-            news_desc = article['description']
+        room_link = str(df.iloc[0, 0]).strip()
+        print(f"✅ ลิงก์ห้องสนทนา: {room_link}\n")
+        
+        # ========================================
+        # ขั้นที่ 2: ดึงข่าวล่าสุดจาก News API
+        # ========================================
+        print("📰 กำลังดึงข่าวโลกล่าสุด...")
+        news_url = f"https://newsapi.org/v2/top-headlines?language=en&pageSize=1&apiKey={NEWS_KEY}"
+        news_response = requests.get(news_url, timeout=10)
+        
+        if news_response.status_code != 200:
+            print(f"⚠️ News API ตอบกลับ: {news_response.status_code}")
+            news_title = "Global Events Today"
+            news_desc = "Current world developments and trends."
         else:
-            news_title = "Global Trends Today"
-            news_desc = "Analysis of current events."
-
-        # 3. ใช้ Gemini AI วิเคราะห์และรีไรท์
+            news_data = news_response.json()
+            if news_data.get('articles') and len(news_data['articles']) > 0:
+                article = news_data['articles'][0]
+                news_title = article.get('title', 'Breaking News')
+                news_desc = article.get('description', 'Latest global news.')
+            else:
+                news_title = "Global Trends"
+                news_desc = "Analysis of current events."
+        
+        print(f"✅ ข่าว: {news_title}\n")
+        
+        # ========================================
+        # ขั้นที่ 3: ให้ Gemini AI วิเคราะห์และรีไรท์
+        # ========================================
+        print("🧠 กำลังให้ AI วิเคราะห์และสร้างเนื้อหา...")
+        
         client = genai.Client(api_key=GEMINI_KEY)
+        
         prompt = f"""
-        วิเคราะห์ข่าวนี้: {news_title}
-        รายละเอียด: {news_desc}
-        
-        คำสั่ง:
-        1. เขียนสรุปวิเคราะห์ให้ดูมีความรู้และน่าสนใจ (ภาษาไทย)
-        2. เน้นย้ำว่านี่คือการวิเคราะห์โดย AI รุ่นพิเศษที่มีโค้ดชุดเดียว
-        3. ปิดท้ายด้วยประโยคเชิญชวนให้คนเข้ามาคุยต่อที่นี่: {room_link}
-        4. บอกว่า "ห้องสนทนานี้รองรับการแปลทุกภาษาทั่วโลก"
-        """
-        
-        response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
-        final_content = response.text
+คุณคือ AI นักวิเคราะห์ข่าวชั้นนำที่ทำงานในโปรเจกต์ "Manus Mission"
 
-        # 4. ส่งไปโพสต์ที่บอร์ดสาธารณะ (Paste.ee)
-        # นี่คือบอร์ดที่โพสต์ได้เลยโดยไม่ต้องสมัครสมาชิก (ใช้เป็นที่กระจายข่าว)
-        post_res = requests.post(
-            "https://api.paste.ee/v1/pastes",
-            json={
-                "description": "Manus Mission Post",
-                "sections": [{"name": "AI Analysis", "contents": final_content}]
-            },
-            headers={"X-Auth-Token": "u6IOfYIDJ34C48R2p6y3S9H9x8r5fX5z9mX1"} # Public Key
+ข่าวที่ต้องวิเคราะห์:
+หัวข้อ: {news_title}
+รายละเอียด: {news_desc}
+
+คำสั่ง:
+1. เขียนวิเคราะห์ข่าวนี้เป็นภาษาไทย ความยาว 150-200 คำ
+2. ใช้ภาษาที่เข้าใจง่าย น่าสนใจ และมีมุมมองที่ลึกซึ้ง
+3. เน้นย้ำว่านี่คือ "การวิเคราะห์โดย AI ที่ได้รับการฝึกฝนมาเป็นพิเศษ"
+4. ท้ายสุดให้เชิญชวนด้วยประโยคนี้:
+
+"💬 สนใจคุยต่อหรืออ่านการวิเคราะห์เชิงลึกเพิ่มเติม?
+👉 เข้าร่วมห้องสนทนาได้ที่: {room_link}
+
+🌍 ห้องสนทนารองรับการแปลภาษาอัตโนมัติทุกภาษาทั่วโลก"
+
+ห้ามใส่หัวข้อหรือ markdown formatting
+เขียนเป็นข้อความต่อเนื่องเลย
+"""
+        
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
         )
         
-        if post_res.status_code == 201:
-            print(f"🚀 สำเร็จ! ดูโพสต์ได้ที่: {post_res.json().get('link')}")
+        final_content = response.text.strip()
+        print(f"✅ สร้างเนื้อหาเสร็จแล้ว ({len(final_content)} ตัวอักษร)\n")
+        
+        # ========================================
+        # ขั้นที่ 4: โพสต์อัตโนมัติไปยังบอร์ดสาธารณะ
+        # ========================================
+        print("📤 กำลังโพสต์ไปยังบอร์ดสาธารณะ...")
+        
+        # เพิ่ม timestamp และ signature
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
+        footer = f"\n\n━━━━━━━━━━━━━━━━━\n⏰ {timestamp}\n🤖 Posted by Manus Mission\n🔗 Source: NewsAPI.org"
+        full_post = final_content + footer
+        
+        # โพสต์ไปที่ Paste.ee (บอร์ดสาธารณะที่ไม่ต้องล็อกอิน)
+        post_response = requests.post(
+            "https://api.paste.ee/v1/pastes",
+            json={
+                "description": f"Manus Mission - {datetime.now().strftime('%Y-%m-%d')}",
+                "sections": [{
+                    "name": "AI News Analysis",
+                    "contents": full_post
+                }]
+            },
+            headers={
+                "X-Auth-Token": "u6IOfYIDJ34C48R2p6y3S9H9x8r5fX5z9mX1"
+            }
+        )
+        
+        if post_response.status_code == 201:
+            post_url = post_response.json().get('link')
+            print(f"\n{'='*60}")
+            print("✅ โพสต์สำเร็จ!")
+            print(f"🔗 ดูโพสต์ได้ที่: {post_url}")
+            print(f"🔗 ลิงก์ห้องสนทนา: {room_link}")
+            print("="*60 + "\n")
+            
+            # แสดงตัวอย่างเนื้อหา
+            print("📝 เนื้อหาที่โพสต์:")
+            print("-" * 60)
+            print(final_content[:300] + "..." if len(final_content) > 300 else final_content)
+            print("-" * 60)
         else:
-            print(f"❌ โพสต์ไม่สำเร็จ: {post_res.status_code}")
-
+            print(f"❌ โพสต์ล้มเหลว! Status: {post_response.status_code}")
+            print(f"Response: {post_response.text}")
+    
     except Exception as e:
-        print(f"❌ ระบบขัดข้อง: {e}")
+        print(f"\n❌ เกิดข้อผิดพลาด: {e}")
+        import traceback
+        traceback.print_exc()
+
 
 if __name__ == "__main__":
     manus_mission()
